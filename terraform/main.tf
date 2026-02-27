@@ -1,55 +1,68 @@
-resource "aws_vpc" "test_vpc" {
+resource "aws_vpc" "main" {
   cidr_block           = "10.123.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
-
   tags = {
-    Name = "dev"
+    Name = "eks-vpc"
   }
 }
 
-resource "aws_subnet" "test_public_subnet" {
-  vpc_id                  = aws_vpc.test_vpc.id
+resource "aws_subnet" "public_1" {
+  vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.123.1.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "us-east-1a"
-
   tags = {
-    Name = "dev-public"
+    Name = "eks-public-1"
   }
 }
 
-resource "aws_internet_gateway" "test_internet_gateway" {
-  vpc_id = aws_vpc.test_vpc.id
-
+resource "aws_subnet" "public_2" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.123.2.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "us-east-1b"
   tags = {
-    Name = "dev-igw"
+    Name = "eks-public-2"
   }
 }
 
-resource "aws_route_table" "test_public_rt" {
-  vpc_id = aws_vpc.test_vpc.id
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "dev-public-rt"
+    Name = "eks-igw"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "eks-public-rt"
   }
 }
 
 resource "aws_route" "default_route" {
-  route_table_id         = aws_route_table.test_public_rt.id
+  route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.test_internet_gateway.id
+  gateway_id             = aws_internet_gateway.main.id
 }
 
-resource "aws_route_table_association" "test_public_assoc" {
-  subnet_id      = aws_subnet.test_public_subnet.id
-  route_table_id = aws_route_table.test_public_rt.id
+resource "aws_route_table_association" "public_1" {
+  subnet_id      = aws_subnet.public_1.id
+  route_table_id = aws_route_table.public.id
 }
 
-resource "aws_security_group" "test_sg" {
-  name        = "dev_sg"
-  description = "test security group"
-  vpc_id      = aws_vpc.test_vpc.id
+resource "aws_route_table_association" "public_2" {
+  subnet_id      = aws_subnet.public_2.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "eks_sg" {
+  name        = "eks_sg"
+  description = "eks security group"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 0
@@ -66,7 +79,20 @@ resource "aws_security_group" "test_sg" {
   }
 }
 
-resource "aws_key_pair" "test_auth" {
-  key_name   = "testkey"
-  public_key = file("~/.ssh/testkey.pub")
+resource "aws_iam_role" "eks_cluster_role" {
+  name = "eks-cluster-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "eks.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
+  policy_arn = "arn:aws:iam:aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.eks_cluster_role.name
 }
