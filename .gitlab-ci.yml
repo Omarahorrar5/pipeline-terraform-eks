@@ -1,0 +1,32 @@
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  script:
+    - docker build -t omarahorrar/devops-pipeline-aws:latest ./app
+    - docker push omarahorrar/devops-pipeline-aws:latest
+
+deploy:
+  stage: deploy
+  image: python:3.11
+  variables:
+    ANSIBLE_HOST_KEY_CHECKING: "False"
+  before_script:
+    - pip install ansible -q
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/testkey
+    - chmod 600 ~/.ssh/testkey
+    - echo "[ec2]" > ansible/inventory.ini
+    - echo "$EC2_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/testkey" >> ansible/inventory.ini
+  script:
+    - cd ansible && ansible-playbook playbook.yml
