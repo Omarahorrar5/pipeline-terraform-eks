@@ -70,16 +70,3 @@ resource "aws_key_pair" "test_auth" {
   key_name   = "testkey"
   public_key = file("~/.ssh/testkey.pub")
 }
-
-
-resource "aws_instance" "dev_node" {
-  ami                    = data.aws_ami.server_ami.id
-  instance_type          = "t3.small"
-  key_name               = aws_key_pair.test_auth.id
-  vpc_security_group_ids = [aws_security_group.test_sg.id]
-  subnet_id              = aws_subnet.test_public_subnet.id
-
-  tags = {
-    Name = "dev-node"
-  }
-}
