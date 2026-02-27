@@ -103,7 +103,7 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   role       = aws_iam_role.eks_cluster_role.name
 }
 
-#iam role for eks worker nodes
+#iam role for eks worker nodes (allow ec2 nodes to join cluster and pull images)
 resource "aws_iam_role" "eks_node_role" {
   name = "eks-node-role"
 
@@ -130,4 +130,40 @@ resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
 resource "aws_iam_role_policy_attachment" "eks_ecr_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
   role       = aws_iam_role.eks_node_role.name
+}
+
+#eks cluster
+resource "aws_eks_cluster" "main" {
+  name     = "express-cluster"
+  role_arn = aws_iam_role.eks_cluster_role.arn
+
+  vpc_config {
+    subnet_ids         = [aws_subnet.public_1.id, aws_subnet.public_2.id]
+    security_group_ids = [aws_security_group.eks_sg.id]
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_policy
+  ]
+}
+
+#eks node group
+resource "aws_eks_node_group" "main" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "express-nodes"
+  node_role_arn   = aws_iam_role.eks_node_role.arn
+  subnet_ids      = [aws_subnet.public_1.id, aws_subnet.public_2.id]
+  instance_types  = ["t3.small"]
+
+  scaling_config {
+    desired_size = 2
+    min_size     = 1
+    max_size     = 3
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_worker_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.eks_ecr_policy
+  ]
 }
