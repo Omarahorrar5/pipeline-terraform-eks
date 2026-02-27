@@ -1,3 +1,4 @@
+#VPC
 resource "aws_vpc" "main" {
   cidr_block           = "10.123.0.0/16"
   enable_dns_support   = true
@@ -7,6 +8,7 @@ resource "aws_vpc" "main" {
   }
 }
 
+#2 subnets in 2 different AZs
 resource "aws_subnet" "public_1" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.123.1.0/24"
@@ -27,6 +29,7 @@ resource "aws_subnet" "public_2" {
   }
 }
 
+#internet gateway
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
@@ -35,6 +38,7 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
+#route table
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -59,6 +63,7 @@ resource "aws_route_table_association" "public_2" {
   route_table_id = aws_route_table.public.id
 }
 
+#security group
 resource "aws_security_group" "eks_sg" {
   name        = "eks_sg"
   description = "eks security group"
@@ -79,6 +84,7 @@ resource "aws_security_group" "eks_sg" {
   }
 }
 
+#iam role for eks control plane (allow eks service to manage aws resources)
 resource "aws_iam_role" "eks_cluster_role" {
   name = "eks-cluster-role"
 
@@ -95,4 +101,33 @@ resource "aws_iam_role" "eks_cluster_role" {
 resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   policy_arn = "arn:aws:iam:aws:policy/AmazonEKSClusterPolicy"
   role       = aws_iam_role.eks_cluster_role.name
+}
+
+#iam role for eks worker nodes
+resource "aws_iam_role" "eks_node_role" {
+  name = "eks-node-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.eks_node_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  role       = aws_iam_role.eks_node_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_ecr_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.eks_node_role.name
 }
