@@ -4,7 +4,9 @@ End-to-end CI/CD pipeline deploying a containerized Node.js application on AWS E
 
 ## Pipeline Architecture
 
-![CI/CD Pipeline - Node.js App Deployment to AWS EKS](./eks_pipeline.png)
+<p align="center">
+  <img src="./eks pipeline.png" alt="CI/CD & DevSecOps Pipeline" width="800"/>
+</p>
 
 ## Flow
 
