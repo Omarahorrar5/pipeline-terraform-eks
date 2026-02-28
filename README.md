@@ -1,51 +1,133 @@
-# devops-pipeline-aws
+# pipeline-terraform-eks
 
-End-to-end CI/CD pipeline deploying a containerized Node.js application on AWS using Terraform, Ansible, Docker, Kubernetes, and GitLab CI.
+End-to-end CI/CD pipeline deploying a containerized Node.js application on AWS EKS using Terraform, Docker, and GitLab CI.
 
 ## Architecture
+
 ```
-git push → GitLab CI → Build Docker Image → Push to DockerHub
-                     → Ansible → SSH into EC2 → kubectl apply → App Live
+git push
+    ↓
+GitLab CI — 3 stages
+    ↓
+Stage 1: Terraform → reads state from S3 → provisions EKS cluster if not exists
+    ↓
+Stage 2: Docker → builds image → pushes to DockerHub
+    ↓
+Stage 3: kubectl → deploys to EKS → 3 pods running
+    ↓
+AWS LoadBalancer → public URL → app live
 ```
 
 ## Stack
 
 - **Node.js** — Express REST API
 - **Docker** — containerized application
-- **Kubernetes** — 3-replica deployment on Minikube
-- **Terraform** — AWS infrastructure (VPC, subnet, security group, EC2)
-- **Ansible** — server configuration (Docker, Minikube, kubectl)
-- **GitLab CI** — automated build and deploy pipeline
-- **AWS EC2** — t3.small instance (2 vCPU / 2GB RAM)
+- **Kubernetes (EKS)** — managed cluster with 2 worker nodes (t3.small)
+- **Terraform** — AWS infrastructure as code with S3 remote state
+- **GitLab CI** — automated 3-stage pipeline
+- **AWS** — EKS, VPC, subnets, IAM roles, LoadBalancer, S3
+
+## Project Structure
+
+```
+pipeline-terraform-eks/
+├── app/
+│   ├── Dockerfile
+│   ├── index.js
+│   └── package.json
+├── k8s/
+│   ├── deployment.yaml
+│   └── service.yaml
+├── terraform/
+│   ├── main.tf
+│   ├── providers.tf
+│   ├── variables.tf
+│   └── outputs.tf
+├── .gitlab-ci.yml
+└── README.md
+```
+
+## Infrastructure (Terraform)
+
+Terraform provisions:
+- VPC with 2 public subnets across 2 availability zones
+- Internet gateway and route tables
+- Security group
+- IAM roles for EKS control plane and worker nodes
+- EKS cluster with managed node group (2 nodes, scales 1-3)
+
+State is stored remotely in AWS S3.
 
 ## Pipeline Stages
 
-| Stage | What It Does |
+| Stage | Trigger | What It Does |
+|---|---|---|
+| infra | always | terraform init → plan → apply |
+| build | always | docker build → push to DockerHub |
+| deploy | always | kubectl apply → rollout restart |
+
+## Kubernetes
+
+- Deployment with 3 replicas
+- Service type LoadBalancer — AWS provisions a public load balancer automatically
+- Image pulled from DockerHub on every deploy
+
+## API Endpoints
+
+| Endpoint | Description |
 |---|---|
-| Build | Builds Docker image and pushes to DockerHub |
-| Deploy | Runs Ansible playbook, applies Kubernetes manifests |
+| `GET /` | Returns app info |
+| `GET /health` | Health check for Kubernetes probes |
 
-## Infrastructure
+---
 
-Terraform provisions:
-- Custom VPC and public subnet
-- Internet gateway and route table
-- Security group
-- EC2 instance (Ubuntu 24.04)
+## Testing
 
-Ansible configures:
-- Docker
-- Minikube
-- kubectl
-
-## Run Locally
+### Connect to the cluster
 ```bash
-cd app
-npm install
-node index.js
+aws eks update-kubeconfig --name express-cluster --region us-east-1
 ```
 
-## Endpoints
+### Check nodes
+```bash
+kubectl get nodes
+```
 
-- `GET /` — returns app info
-- `GET /health` — health check for Kubernetes probes
+### Check pods
+```bash
+kubectl get pods
+```
+
+### Check service and get public URL
+```bash
+kubectl get svc
+```
+
+### Test the app
+```bash
+curl http://EXTERNAL-IP
+```
+
+Expected response:
+```json
+{
+  "message": "Hello from Node.js App!",
+  "version": "1.0.0",
+  "environment": "development"
+}
+```
+
+### Check deployment details
+```bash
+kubectl describe deployment express-deployment
+```
+
+### Check pod logs
+```bash
+kubectl logs -l app=express
+```
+
+### Check Terraform state
+```bash
+aws s3 ls s3://omar-terraform-state-eks
+```
