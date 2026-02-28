@@ -2,7 +2,11 @@
 
 End-to-end CI/CD pipeline deploying a containerized Node.js application on AWS EKS using Terraform, Docker, and GitLab CI.
 
-## Architecture
+## Pipeline Architecture
+
+![CI/CD Pipeline - Node.js App Deployment to AWS EKS](./eks_pipeline.png)
+
+## Flow
 
 ```
 git push
@@ -44,6 +48,7 @@ pipeline-terraform-eks/
 │   ├── variables.tf
 │   └── outputs.tf
 ├── .gitlab-ci.yml
+├── eks_pipeline.png
 └── README.md
 ```
 
