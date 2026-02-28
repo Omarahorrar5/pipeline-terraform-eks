@@ -3,23 +3,23 @@ stages:
   - build
   - deploy
 
-#stage 1: terraform (only runs if terraform files changed)
+# stage 1: terraform (reads state from S3, applies if changes)
+
 terraform:
   stage: infra
   image: hashicorp/terraform:latest
+  variables:
+    AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+    AWS_DEFAULT_REGION: us-east-1
   before_script:
-    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-    - aws configure set region us-east-1
     - cd terraform && terraform init
   script:
     - terraform plan
     - terraform apply -auto-approve
-  only:
-    changes:
-      - terraform/**/*
 
-#stage 2: build docker image
+# stage 2: build docker image
+
 build:
   stage: build
   image: docker:24
@@ -33,12 +33,9 @@ build:
   script:
     - docker build -t omarahorrar/devops-pipeline-eks:latest ./app
     - docker push omarahorrar/devops-pipeline-eks:latest
-  only:
-    changes:
-      - app/**/*
-      - k8s/**/*
 
-#stage 3: deploy to EKS cluster
+# stage 3: deploy to EKS
+
 deploy:
   stage: deploy
   image: python:3.11
@@ -53,7 +50,3 @@ deploy:
   script:
     - kubectl apply -f k8s/
     - kubectl rollout restart deployment/express-deployment
-  only:
-    changes:
-      - app/**/*
-      - k8s/**/*
