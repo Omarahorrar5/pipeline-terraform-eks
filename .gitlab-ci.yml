@@ -1,0 +1,59 @@
+stages:
+  - infra
+  - build
+  - deploy
+
+#stage 1: terraform (only runs if terraform files changed)
+terraform:
+  stage: infra
+  image: hashicorp/terraform:latest
+  before_script:
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set region us-east-1
+    - cd terraform && terraform init
+  script:
+    - terraform plan
+    - terraform apply -auto-approve
+  only:
+    changes:
+      - terraform/**/*
+
+#stage 2: build docker image
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  script:
+    - docker build -t omarahorrar/devops-pipeline-eks:latest ./app
+    - docker push omarahorrar/devops-pipeline-eks:latest
+  only:
+    changes:
+      - app/**/*
+      - k8s/**/*
+
+#stage 3: deploy to EKS cluster
+deploy:
+  stage: deploy
+  image: python:3.11
+  before_script:
+    - pip install awscli -q
+    - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    - aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+    - aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+    - aws configure set region us-east-1
+    - aws eks update-kubeconfig --name express-cluster --region us-east-1
+  script:
+    - kubectl apply -f k8s/
+    - kubectl rollout restart deployment/express-deployment
+  only:
+    changes:
+      - app/**/*
+      - k8s/**/*
